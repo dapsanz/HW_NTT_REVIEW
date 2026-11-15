@@ -46,14 +46,24 @@ module tb_ntt_kyber_kat();
         zeta <= zeta_rom[addr_zeta];
     end
 
-    integer i;
+    integer i = 0;
     integer errors = 0;
+    
+    // Cycle Counting Logic
+    integer cycle_counter = 0;
+    reg is_running = 0;
+
+    always @(posedge clk) begin
+        if (is_running) begin
+            cycle_counter = cycle_counter + 1;
+        end
+    end
 
     initial begin
-        // Load the generated Kyber C vectors
-        $readmemh("poly_in.mem", poly_ram);
+        // Test NTT
+        $readmemh("ntt_poly_in.mem", poly_ram);
         $readmemh("zetas.mem", zeta_rom);
-        $readmemh("expected_poly_out.mem", expected_ram);
+        $readmemh("ntt_expected_poly_out.mem", expected_ram);
 
         rst = 1; start = 0; mode = 0; // mode 0 = NTT
         #20;
@@ -61,14 +71,19 @@ module tb_ntt_kyber_kat();
         #20;
         
         $display("Starting Hardware Kyber NTT...");
+        cycle_counter = 0;
+        is_running = 1;
+        
         start = 1;
         #10;
         start = 0;
 
         wait(done == 1'b1);
+        is_running = 0;
         #20;
         
-        $display("NTT Complete. Verifying against Kyber C reference...");
+        $display("NTT Completed in %d cycles", cycle_counter);
+        $display("Verifying against Kyber C reference...");
         for (i = 0; i < 256; i = i + 1) begin
             if (poly_ram[i] !== expected_ram[i]) begin
                 $display("ERROR at index %d: Hardware = %04X, Expected = %04X", i, poly_ram[i], expected_ram[i]);
@@ -78,10 +93,48 @@ module tb_ntt_kyber_kat();
 
         if (errors == 0) begin
             $display("========================================");
-            $display("KAT PASSED: Hardware perfectly matches Kyber C");
+            $display("NTT KAT PASSED");
             $display("========================================");
         end else begin
-            $display("KAT FAILED with %d errors.", errors);
+            $display("NTT KAT FAILED with %d errors.", errors);
+        end
+        
+        // Test INTT
+        $readmemh("intt_poly_in.mem", poly_ram);
+        $readmemh("intt_expected_poly_out.mem", expected_ram);
+        errors = 0;
+        rst = 1; start = 0; mode = 1; // mode 1 = INTT
+        #20;
+        rst = 0;
+        #20;
+        
+        $display("Starting Hardware Kyber INTT...");
+        cycle_counter = 0;
+        is_running = 1;
+        
+        start = 1;
+        #10;
+        start = 0;
+
+        wait(done == 1'b1);
+        is_running = 0;
+        #20;
+        
+        $display("INTT Completed in %d cycles", cycle_counter);
+        $display("Verifying against Kyber C reference...");
+        for (i = 0; i < 256; i = i + 1) begin
+            if (poly_ram[i] !== expected_ram[i]) begin
+                $display("ERROR at index %d: Hardware = %04X, Expected = %04X", i, poly_ram[i], expected_ram[i]);
+                errors = errors + 1;
+            end
+        end
+
+        if (errors == 0) begin
+            $display("========================================");
+            $display("INTT KAT PASSED");
+            $display("========================================");
+        end else begin
+            $display("NTT KAT FAILED with %d errors.", errors);
         end
 
         $finish;

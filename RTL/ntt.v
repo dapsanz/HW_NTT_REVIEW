@@ -22,13 +22,13 @@ module ntt_engine (
     input  wire [15:0] zeta
 );
 
-    localparam S_IDLE       = 3'd0;
-    localparam S_OUTER_LOOP = 3'd1;
-    localparam S_INNER_READ = 3'd2;
-    localparam S_INNER_WAIT = 3'd3;
-    localparam S_INNER_CALC = 3'd4;
-    localparam S_INNER_WRITE= 3'd5;
-    localparam S_DONE       = 3'd6;
+    localparam S_IDLE        = 4'd0;
+    localparam S_OUTER_LOOP  = 4'd1;
+    localparam S_INNER_READ  = 4'd2;
+    localparam S_INNER_WAIT  = 4'd3;
+    localparam S_INNER_CALC  = 4'd4;
+    localparam S_INNER_WRITE = 4'd5;
+    localparam S_DONE        = 4'd6;
 
     reg [2:0] state;
     reg [7:0] len;
@@ -39,13 +39,15 @@ module ntt_engine (
     wire [15:0] calc_out_a;
     wire [15:0] calc_out_b;
 
+    wire scale = (mode == 1 && len == 8'd128);
     modular_butterfly u_math_core (
         .mode(mode),
         .din_a(din_a),
         .din_b(din_b),
         .zeta(zeta),
         .dout_a(calc_out_a),
-        .dout_b(calc_out_b)
+        .dout_b(calc_out_b),
+        .scale(scale)
     );
 
     always @(posedge clk) begin
@@ -72,11 +74,10 @@ module ntt_engine (
                         state   <= S_OUTER_LOOP;
                     end
                 end
-
                 S_OUTER_LOOP: begin
                     we_a <= 0;
                     we_b <= 0;
-                    if ((mode == 0 && len == 1) || (mode == 1 && len == 0)) begin
+                    if (mode == 0 && len == 1 || mode == 1 && len == 0) begin
                         state <= S_DONE;
                     end else begin
                         j <= j_start;
@@ -122,11 +123,10 @@ module ntt_engine (
                         end
                     end
                 end
-
                 S_DONE: begin
-                    we_a <= 0;
-                    we_b <= 0;
-                    done <= 1;
+                    we_a  <= 0;
+                    we_b  <= 0;
+                    done  <= 1;
                     state <= S_IDLE;
                 end
             endcase

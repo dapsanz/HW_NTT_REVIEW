@@ -2,6 +2,7 @@
 
 module modular_butterfly (
     input  wire        mode,      // 0 = NTT (DIT), 1 = INTT (DIF)
+    input  wire        scale,
     input  wire [15:0] din_a,
     input  wire [15:0] din_b,
     input  wire [15:0] zeta,
@@ -12,9 +13,9 @@ module modular_butterfly (
     // ----------------------------------------------------
     // KYBER SPECIFIC CONSTANTS
     // ----------------------------------------------------
-    localparam signed [15:0] QINV      = -16'sd3327;  // Kyber QINV (62209 unsigned)
-    localparam signed [15:0] Q         =  16'sd3329;  // Kyber Prime
-    localparam signed [15:0] BARRETT_V =  16'sd20159; // Kyber Barrett Constant ((1<<26) + Q/2)/Q
+    localparam signed [15:0] QINV      = -16'sd3327;     // Kyber QINV (62209 unsigned)
+    localparam signed [15:0] Q         =  16'sd3329;     // Kyber Prime
+    localparam signed [15:0] BARRETT_V =  16'sd20159;    // Kyber Barrett Constant ((1<<26) + Q/2)/Q
     localparam signed [31:0] BARR_BIAS =  32'sd33554432; // 1 << 25
 
     // Cast all inputs to signed for proper Two's Complement math
@@ -47,7 +48,7 @@ module modular_butterfly (
     wire signed [31:0] barr_t1       = intt_add * BARRETT_V;
     wire signed [31:0] barr_t2       = (barr_t1 + BARR_BIAS) >>> 26; 
     wire signed [15:0] barr_t3       = barr_t2[15:0] * Q;
-    wire signed [15:0] intt_out_a    = intt_add - barr_t3;
+    //wire signed [15:0] intt_out_a    = intt_add - barr_t3;
 
     // INTT Subtraction Path (with Montgomery Reduction)
     wire signed [15:0] intt_sub       = b_sig - a_sig;
@@ -55,7 +56,30 @@ module modular_butterfly (
     wire signed [15:0] intt_mont_t    = $signed(intt_mult[15:0]) * QINV; 
     wire signed [31:0] intt_mont_prod = intt_mont_t * Q;
     wire signed [31:0] intt_mont_sub  = intt_mult - intt_mont_prod;
-    wire signed [15:0] intt_out_b     = intt_mont_sub[31:16];
+    //wire signed [15:0] intt_out_b     = intt_mont_sub[31:16];
+    
+    // ====================================================
+    // NINTT SCALING 
+    // ====================================================
+    // unscaled INTT 
+    wire signed [15:0] intt_unscaled_a = intt_add - barr_t3;
+    wire signed [15:0] intt_unscaled_b = intt_mont_sub[31:16];
+
+    // Montgomery Multiplication by 1441 for Port A
+    wire signed [31:0] scale_mult_a      = intt_unscaled_a * 16'sd1441;
+    wire signed [15:0] scale_mont_t_a    = $signed(scale_mult_a[15:0]) * QINV;
+    wire signed [31:0] scale_mont_prod_a = scale_mont_t_a * Q;
+    wire signed [15:0] scale_out_a       = (scale_mult_a - scale_mont_prod_a) >>> 16;
+
+    // Montgomery Multiplication by 1441 for Port B
+    wire signed [31:0] scale_mult_b      = intt_unscaled_b * 16'sd1441;
+    wire signed [15:0] scale_mont_t_b    = $signed(scale_mult_b[15:0]) * QINV;
+    wire signed [31:0] scale_mont_prod_b = scale_mont_t_b * Q;
+    wire signed [15:0] scale_out_b       = (scale_mult_b - scale_mont_prod_b) >>> 16;
+
+    // Multiplex the output: Only apply the scale on the final stage
+    wire signed [15:0] intt_out_a = scale ? scale_out_a : intt_unscaled_a;
+    wire signed [15:0] intt_out_b = scale ? scale_out_b : intt_unscaled_b;
 
     // ====================================================
     // OUTPUT MULTIPLEXER
