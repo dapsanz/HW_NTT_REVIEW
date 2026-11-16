@@ -27,8 +27,9 @@ module ntt_engine (
     localparam S_INNER_READ  = 4'd2;
     localparam S_INNER_WAIT  = 4'd3;
     localparam S_INNER_CALC  = 4'd4;
-    localparam S_INNER_WRITE = 4'd5;
-    localparam S_DONE        = 4'd6;
+    localparam S_INNER_PIPE  = 4'd5;
+    localparam S_INNER_WRITE = 4'd6;
+    localparam S_DONE        = 4'd7;
 
     reg [2:0] state;
     reg [7:0] len;
@@ -41,13 +42,16 @@ module ntt_engine (
 
     wire scale = (mode == 1 && len == 8'd128);
     modular_butterfly u_math_core (
+//        .scale(scale),
+        .clk(clk),
+        .rst(rst),
         .mode(mode),
         .din_a(din_a),
         .din_b(din_b),
         .zeta(zeta),
         .dout_a(calc_out_a),
-        .dout_b(calc_out_b),
-        .scale(scale)
+        .dout_b(calc_out_b)
+
     );
 
     always @(posedge clk) begin
@@ -99,6 +103,12 @@ module ntt_engine (
                 end
 
                 S_INNER_CALC: begin
+//                    dout_a <= calc_out_a;
+//                    dout_b <= calc_out_b;
+//                    state  <= S_INNER_WRITE;
+                    state <= S_INNER_PIPE;
+                end
+                S_INNER_PIPE: begin
                     dout_a <= calc_out_a;
                     dout_b <= calc_out_b;
                     state  <= S_INNER_WRITE;
